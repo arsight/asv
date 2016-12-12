@@ -1,10 +1,19 @@
 
 --- BANK.TXT 
-select iotdnum + (idsmr-1)*1000 FIL,cotdname$ NAME from "otd" otd
+--  В BANK.TXT должны попадать только подразделения на самостоятельном балансе. 
+-- В вашем случае – это ГО и Московский ф-л (пусть даже и закрыт). 
+-- Он понадобится, когда потребуется выгрузка за 3х летний период (FIN-период), предшествующий отзыву лицензии. ККО, ДО, ОО и прочие в файл не включаются.
+select  -- (iotdnum + (idsmr-1)*1000 ) FIL,
+       idsmr FIL, -- выводим только филиалы, которые со своим балансом 
+       cotdname$ NAME 
+  from "otd" otd
   where dotdclose is null
+        and iotdnum = 0 -- выводим только филиалы, которые со своим балансом
   and 
+  (
   exists (select null from "acc" where iaccotd=otd.iotdnum ) 
    or exists (select null from "cus" where icusotd=otd.iotdnum)
+  )
 order by idsmr,iotdnum   
   
    
@@ -17,7 +26,7 @@ select 'АБС' KOD_PS, 'ЦАБС "БАНК 21 ВЕК"' NAME_PS from dual
  
 select 
   'АБС'                     "KOD_PS" 
-  ,nvl(icusotd,0) + (idsmr-1)*1000 "FIL" 
+  ,idsmr "FIL"                                   --  nvl(icusotd,0) + (idsmr-1)*1000 "FIL" 
   ,icusnum                  "ID"
   ,TRANSLATE(CCUSNAME,'^''','-`')  "NAME" 
   ,dcusopen                 "D_OPEN" 
@@ -72,11 +81,11 @@ end "DEPCODE"
 ,TRANSLATE(nvl(cus_util.get_cus_address(icusnum,2), cus_util.get_cus_address(icusnum,3)) ,'^''','-`') "ADDR_FIZ"
 , ICUSOKPO "OKPO"
 , cus.CCUSKSIVA "OGRN"
-,'--' "RTS"
-,'--' "FSFR"
+,null "RTS"
+,null "FSFR"
 ,CCUSCUPREGNUM "PF"
 ,CCUSCUMREGNUM "FSS"
-,'--' "FOMS"
+,null "FOMS"
 ,nvl(CCUSNAL_SERT,ccusregn_old) "NOM_REG"
 ,CCUSGOV_CERT "NOM_NALOG"
 ,CCUSKOPF "OKOPF"
@@ -112,11 +121,12 @@ icusnum not in (20000000,80001890,80000765,80001089,80000861)
 order by icusnum
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
+
+
 --- «Справочник счетов» (ACCOUNT_ddmmyy.TXT)
 select 
 'АБС' "KOD_PS"
---,iaccotd "FIL"
-,iaccotd + (idsmr-1)*1000 "FIL"
+,idsmr "FIL"                                 -- ,iaccotd + (idsmr-1)*1000 "FIL"  -- вариант для 
 ,iacccus "ID"
 ,caccacc "KOD_SCHET"
 ,caccacc "SCHET"
@@ -127,33 +137,35 @@ select
 ,caccsio "NOM_DOC" /* дополнить? */ 
 ,to_char(dacclastoper,'DD.MM.YYYY') "D_DOG"
 /*,UTIL_DM2.ACC_OST(acc.idSMR,caccacc,cacccur,:date1,'V') "OST_VAL"*/
---,ACC_UTIL.GET_ACC_BALANCE(caccacc,cacccur,idsmr,to_date('07.09.2016','dd.mm.yyyy'),'v') * 100"OST_VAL"
---,ACC_UTIL.GET_ACC_BALANCE(caccacc,cacccur,idsmr,to_date('07.09.2016','dd.mm.yyyy'),'r') * 100 "OST_RUR"
-,ACC_UTIL.GET_ACC_BALANCE(caccacc,cacccur,idsmr,to_date('07.09.2013','dd.mm.yyyy'),'v') * 100"OST_VAL"
-,ACC_UTIL.GET_ACC_BALANCE(caccacc,cacccur,idsmr,to_date('07.09.2013','dd.mm.yyyy'),'r') * 100 "OST_RUR"
+,ACC_UTIL.GET_ACC_BALANCE(caccacc,cacccur,idsmr,to_date('07.09.2016','dd.mm.yyyy'),'v') * 100 "OST_VAL"
+,ACC_UTIL.GET_ACC_BALANCE(caccacc,cacccur,idsmr,to_date('07.09.2016','dd.mm.yyyy'),'r') * 100 "OST_RUR"
 -- вариант1 - только действующие блокировки 
 --,decode((select count(*) from acc_over_sum where caosacc=caccacc and caoscur=cacccur and daosdelete is null and  caossumtype in ('A','B')) , 0,0,1 )"AREST"
 --,'Количество  ограничений (арестов) - '||(select count(*) from acc_over_sum where caosacc=caccacc and caoscur=cacccur and daosdelete is null and  caossumtype in ('A','B')) "COUNT_OP"
 -- вариант2 - все блокировки 
-,decode((select count(*) from acc_over_sum where caosacc=caccacc and caoscur=cacccur and  caossumtype in ('A','B') ) , 0,0,1 )"AREST"
-,'Количество  ограничений (арестов) - '||(select count(*) from acc_over_sum where caosacc=caccacc and caoscur=cacccur and  caossumtype in ('A','B')) "COUNT_OP"
+,decode((select count(*) from acc_over_sum where caosacc=caccacc and caoscur=cacccur and  caossumtype in ('A','B') and DAOSDELETE is null ) , 0,0,1 )"AREST"
+,'Количество  ограничений (арестов) - '||(select count(*) from acc_over_sum where caosacc=caccacc and caoscur=cacccur and  caossumtype in ('A','B') AND DAOSDELETE is null ) "COUNT_OP"
 from "acc" acc 
 where
---iacccus=32955 or
---iacccus=24526
---caccacc='40702810700000032120' or
---caccacc='40802810200000031880'
---caccacc='40702810000300028172' and
---idsmr>1
+--iacccus=32955 or --iacccus=24526 --caccacc='40702810700000032120' or --caccacc='40802810200000031880' --caccacc='40702810000300028172' and --idsmr>1 
 --
-(IACCREZERV =0 or IACCREZERV is null)  
-/*RS*/  --and  (not ( caccprizn='З' and daccclose<to_date('07.09.2016','dd.mm.yyyy') )) 
-/*FIN*/ and daccopen<to_date('07.09.2016','dd.mm.yyyy') and (not ( caccprizn='З' and daccclose<to_date('07.09.2013','dd.mm.yyyy') )) /* :date1 -  дата начала периода */      
+(IACCREZERV in (0,2) or IACCREZERV is null) 
+/*RS*/    and  (not ( caccprizn='З' and daccclose<to_date('07.09.2016','dd.mm.yyyy') ))  and daccopen<to_date('15.11.2016','dd.mm.yyyy')
+/*FIN*/ --  and daccopen<to_date('07.09.2016','dd.mm.yyyy') and (not ( caccprizn='З' and daccclose<to_date('07.09.2013','dd.mm.yyyy') )) /* :date1 -  дата начала периода */      
 order by caccacc
+
+
+SELECT * from acc where caccacc='40603810800040000001'
+and
+(IACCREZERV in (0,2) or IACCREZERV is null)  
+/*RS*/   and  (not ( caccprizn='З' and daccclose<to_date('07.09.2016','dd.mm.yyyy') ))  and daccopen<to_date('15.11.2016','dd.mm.yyyy')
+/*FIN*/ --  and daccopen<to_date('07.09.2016','dd.mm.yyyy') and (not ( caccprizn='З' and daccclose<to_date('07.09.2013','dd.mm.yyyy') )) /* :date1 -  дата начала периода */      
+
 
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 -- OPER_07.09.13_07.09.16.TXT   -+-  OPER_07.09.16_dd.mm.16.TXT
-
+/*
+-- вариант без translate-ов
 select
 'АБС' "KOD_PS"
 ,(idsmr-1)*1000 "FIL"
@@ -185,11 +197,12 @@ where
 trunc(dtrntran)>=to_date('07.09.2013','dd.mm.yyyy')
 and trunc(dtrntran)<to_date('07.09.2016','dd.mm.yyyy') 
 order by dtrntran
+*/
 
 ------------- вар 2 С  TRANSLATE-ами
 select
 'АБС' "KOD_PS"
-,(idsmr-1)*1000 "FIL"
+,idsmr "FIL"  --,(idsmr-1)*1000 "FIL"
 ,to_char(dtrntran,'dd.mm.yyyy') "D_OPER"
 ,itrndocnum "NOM_DOC"
 ,to_char(dtrndoc,'dd.mm.yyyy') "D_DOC" --,to_char(dtrncreate,'dd.mm.yyyy') "D_DOC" --,to_char(dtrnshadow,'dd.mm.yyyy') "D_DOC" ????
@@ -215,8 +228,9 @@ select
 from "trn" trn
 where 
 --itrnnum=198586490 and 
-trunc(dtrntran)>=to_date('07.09.2013','dd.mm.yyyy')
-and trunc(dtrntran)<to_date('07.09.2016','dd.mm.yyyy') 
+/*FIN*/ --trunc(dtrntran)>=to_date('07.09.2013','dd.mm.yyyy') and trunc(dtrntran)<to_date('07.09.2016','dd.mm.yyyy') 
+/*RS*/ -- trunc(dtrntran)>=to_date('07.09.2016','dd.mm.yyyy') and trunc(dtrntran)<to_date('15.11.2016','dd.mm.yyyy') 
+/*  */  trunc(dtrntran)>=to_date('15.11.2016','dd.mm.yyyy') 
 order by dtrntran
 --------------------------------------------------------------------------------------------------------------------------------------
 
@@ -237,6 +251,75 @@ from "acc_over_sum" aos,"acc" acc ,"cus"  cus
 where AOS.CAOSACC=acc.caccacc and cus.icusnum=ACC.IACCCUS  
 --and (caosacc in ('40702978100000104202','40702810100000001201','40702810600070028002'))
 and CAOSSUMTYPE in ('A','B') /*--???--*/
-and (DAOSDELETE<to_date('07.09.2016','dd.mm.yyyy') or DAOSDELETE is null)
+--and (DAOSDELETE<to_date('07.09.2016','dd.mm.yyyy') or DAOSDELETE is null)
 and  DAOSDELETE is null
 order by iacccus,DAOSCREATE
+--order by d_close
+
+
+
+
+
+
+
+
+
+select * 
+from "trn" trn
+where itrnnum=200068172
+
+select count (*) from "acc" acc 
+
+select count(*) from acc_over_sum where caosacc=caccacc and caoscur=cacccur and daosdelete is null
+
+
+select * from acc_over_sum
+where  
+caccacc='40702810700000032120'
+
+
+select * from acc_over_sum
+where  DAOSDELETE>='07.09.16'
+
+
+40702810700000032120
+
+
+select acc.idSMR,caccacc,cacccur,UTIL_DM2.ACC_OSTt(acc.idSMR,acc.caccacc,'RUR',sysdate) "OST_VAL" from acc where iacccus=32955
+
+select acc.idSMR,caccacc,cacccur,ACC_UTIL.GET_ACC_BALANCE(caccacc,cacccur,idsmr,to_date('07.09.2016','dd.mm.yyyy'),'v'), util_dm2.ACC_OSTt(acc.idSMR,acc.caccacc,'RUR',to_date('07.09.2016','dd.mm.yyyy'),'V') "OST_VAL" from acc where iacccus=32955
+
+
+
+
+
+
+
+
+
+
+
+
+/*
+select cusrlogname,cusrname from usr order by cusrlogname
+
+
+cus_util
+
+--,CUS_UTIL.get_cus_director(icusnum,1,sysdate) "FIO_ORG1-"
+,CUS_UTIL.GET_CUS_NAME( CUS_UTIL.GET_CUS_CONTROL(icusnum,1,sysdate,'Общее собрание участников','Директор'))  "FIO_ORG"
+,CUS_UTIL.GET_CUS_NAME( CUS_UTIL.GET_CUS_CONTROL(icusnum,1,sysdate,'КОНФЕРЕНЦИЯ','исполнительный директор'))  "FIO_ORG1"
+,nvl((select ccusname from "cus" c1
+         where c1.icusnum in (select id_cus_child from cus_lnk where id_lnk_type = 1
+                                                              and sysdate > to_date( date_begin, 'DD.MM.RRRR' )
+                                                              and sysdate <= to_date( date_end , 'DD.MM.RRRR' )
+                                                            and id_cus_parent = cus.icusnum
+           and rownum = 1)
+         ), CUS_UTIL.GET_CUS_NAME( CUS_UTIL.GET_CUS_CONTROL(icusnum,1,sysdate,'Общее собрание участников','Директор')) ) as "FIO_ORG2"
+
+CUS_UTIL.GET_CUS_NAME( CUS_UTIL.GET_CUS_CONTROL(icusnum,1,sysdate,'Общее собрание участников','Директор')) 
+
+
+select id_cus_child from cus_lnk where id_lnk_type = 1
+
+*/
