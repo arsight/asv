@@ -128,14 +128,20 @@ select
 ,decode(caccprizn,'З',to_char(daccclose,'dd.mm.yyyy'),null) "D_CLOS"
 ,caccsio "NOM_DOC" /* дополнить? */ 
 ,to_char(dacclastoper,'DD.MM.YYYY') "D_DOG"
-,ACC_UTIL.GET_ACC_BALANCE(caccacc,cacccur,idsmr,to_date('07.09.2016','dd.mm.yyyy'),'v') * 100 "OST_VAL"
-,ACC_UTIL.GET_ACC_BALANCE(caccacc,cacccur,idsmr,to_date('07.09.2016','dd.mm.yyyy'),'r') * 100 "OST_RUR"
+/* RS,FIN :*/
+--,ACC_UTIL.GET_ACC_BALANCE(caccacc,cacccur,idsmr,to_date('07.09.2016','dd.mm.yyyy'),'v') * 100 "OST_VAL"
+--,ACC_UTIL.GET_ACC_BALANCE(caccacc,cacccur,idsmr,to_date('07.09.2016','dd.mm.yyyy'),'r') * 100 "OST_RUR"
+/*END :*/
+,ACC_UTIL.GET_ACC_BALANCE(caccacc,cacccur,idsmr,to_date('15.11.2016','dd.mm.yyyy'),'v') * 100 "OST_VAL"
+,ACC_UTIL.GET_ACC_BALANCE(caccacc,cacccur,idsmr,to_date('15.11.2016','dd.mm.yyyy'),'r') * 100 "OST_RUR"
+--  только действующие блокировки 
 --  только действующие блокировки 
 ,decode((select count(*) from acc_over_sum where caosacc=caccacc and caoscur=cacccur and  caossumtype in ('A','B') and DAOSDELETE is null ) , 0,0,1 )"AREST"
 ,'Количество  ограничений (арестов) - '||(select count(*) from acc_over_sum where caosacc=caccacc and caoscur=cacccur and  caossumtype in ('A','B') AND DAOSDELETE is null ) "COUNT_OP"
 from "acc" acc 
 where
 (IACCREZERV in (0,2) or IACCREZERV is null) 
+/*END*/--     and  (not ( caccprizn='З' and daccclose<to_date('15.11.2016','dd.mm.yyyy') ))  and daccopen<to_date('15.11.2016','dd.mm.yyyy')
 /*RS*/    and  (not ( caccprizn='З' and daccclose<to_date('07.09.2016','dd.mm.yyyy') ))  and daccopen<to_date('15.11.2016','dd.mm.yyyy')
 /*FIN*/ --  and daccopen<to_date('07.09.2016','dd.mm.yyyy') and (not ( caccprizn='З' and daccclose<to_date('07.09.2013','dd.mm.yyyy') )) /* :date1 -  дата начала периода */      
 order by caccacc
